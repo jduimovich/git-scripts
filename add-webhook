@@ -1,0 +1,77 @@
+source verify-env-variables
+
+REPO_NAME=`echo $1 | cut -d '/' -f2 `
+
+if [ -z $1 ]
+then
+echo $0 Usage: $1 repository-name
+echo $0 "Showing all webhooks via  sh list-gitrepos-hooked | xargs -n1 ./$0"
+sh ./list-gitrepos-hooked | xargs -n1 ./$0
+exit
+else 
+REPO=https://api.github.ibm.com/repos/$MY_IBM_GIT_USER/$REPO_NAME/hooks
+echo $0 API endpoing $REPO
+fi
+
+MY_IP=$(ifconfig | grep netmask | grep "9\." | sed -n 2p | cut -d ' ' -f2) 
+if [ -z "$MY_IP" ]
+then
+MY_IP=$(ifconfig | grep netmask | grep "9\." | cut -d ' ' -f2) 
+fi
+if [ -z "$MY_IP" ]
+then
+echo $0 "\n"No 9.xx.xx.xx IP address found - Demo will not work without VPN 
+exit   
+fi
+
+echo $0 Local IP address is " $MY_IP "
+
+
+temp_file=$(mktemp)
+curl -s -i -H "Authorization: token $MY_IBM_GIT_TOKEN" $REPO  >$temp_file
+
+hack=$(mktemp)
+echo "{" > $hack
+grep nip.io $temp_file | cut -f 1 -d ","  >>$hack
+echo "}" >> $hack
+ 
+WC=$(cat $hack | wc)
+COUNT=$(echo $WC | cut -d ' ' -f1)
+if test $COUNT -gt 3
+then
+  echo $0 too many hooks found at git for the script to work
+  grep nip.io $temp_file | cut -f 1 -d ","     
+  echo $0 you can update here open https://github.ibm.com/$MY_IBM_GIT_USER/$REPO_NAME/settings/hooks
+  exit 
+fi
+ 
+CURRENT_HOOK=$(cat $hack | jq -rc ".url")
+if [ -z "$CURRENT_HOOK" ]
+then
+echo $0 "The Github hook is missing, exiting" 
+cat $hack 
+exit
+else 
+echo $0 "OK - The Github hook is set to:" $CURRENT_HOOK
+fi
+
+HOOKS=$(kubectl get ksvc -n $KABANERO_DEMO_NS)
+
+echo $HOOKS | grep $CURRENT_HOOK > /dev/null
+if [ $? -eq 0 ] ; then
+    echo $0 "OK - This hook " $CURRENT_HOOK  " is present on this cluster."
+else  
+    echo $0 "Missing Hook " $CURRENT_HOOK " in the cluster"
+fi;
+
+if grep -q $MY_IP $temp_file; then
+    echo $0 OK - IP address "$MY_IP" matches the hook in $REPO 
+else
+    echo $0 Local IP address " $MY_IP " does NOT match the hook in $REPO
+    echo $0 Change the hook to the correct one from this list or create a new one
+    kubectl get ksvc -n $KABANERO_DEMO_NS  
+    echo $0 you can update manually open https://github.ibm.com/$MY_IBM_GIT_USER/$REPO_NAME/settings/hooks
+fi
+
+
+

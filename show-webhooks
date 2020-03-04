@@ -1,0 +1,16 @@
+source verify-env-variables
+
+REPO_NAME=`echo $1 | cut -d '/' -f2 `
+
+if [ -z $1 ]
+then
+echo $0 Usage: $1 repository-name
+exit
+else 
+REPO=https://api.github.com/repos/$MY_IBM_GIT_USER/$REPO_NAME/hooks
+echo $0 API endpoing $REPO
+fi
+
+echo hooks 
+curl -s -i -H "Authorization: token $MY_PUBLIC_GIT_TOKEN" $REPO 
+
